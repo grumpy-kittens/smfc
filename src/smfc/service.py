@@ -23,28 +23,32 @@ class Service:
     """Service class contains all resources/functions for the execution."""
 
     # Service data.
-    config: ConfigParser        # Instance for a parsed configuration
-    sudo: bool                  # Use sudo command
-    log: Log                    # Instance for a Log class
-    udevc: Context              # Reference to a pyudev Context instance (i.e. udev database connection)
-    ipmi: Ipmi                  # Instance for an Ipmi class
-    cpu_zone: CpuZone           # Instance for a CPU Zone fan controller class
-    hd_zone: HdZone             # Instance for an HD Zone fan controller class
-    gpu_zone: GpuZone           # Instance for a GPU Zone fan controller class
-    const_zone: ConstZone       # Instance for a Const Zone fan controller class
-    cpu_zone_enabled: bool      # CPU zone fan controller enabled
-    hd_zone_enabled: bool       # HD zone fan controller enabled
-    gpu_zone_enabled: bool      # GPU zone fan controller enabled
-    const_zone_enabled: bool    # Const zone fan controller enabled
+    config: ConfigParser  # Instance for a parsed configuration
+    sudo: bool  # Use sudo command
+    log: Log  # Instance for a Log class
+    udevc: Context  # Reference to a pyudev Context instance (i.e. udev database connection)
+    ipmi: Ipmi  # Instance for an Ipmi class
+    cpu_zone: CpuZone  # Instance for a CPU Zone fan controller class
+    hd_zone: HdZone  # Instance for an HD Zone fan controller class
+    gpu_zone: GpuZone  # Instance for a GPU Zone fan controller class
+    const_zone: ConstZone  # Instance for a Const Zone fan controller class
+    cpu_zone_enabled: bool  # CPU zone fan controller enabled
+    hd_zone_enabled: bool  # HD zone fan controller enabled
+    gpu_zone_enabled: bool  # GPU zone fan controller enabled
+    const_zone_enabled: bool  # Const zone fan controller enabled
 
     def exit_func(self) -> None:
         """This function is called at exit (in case of exceptions or runtime errors cannot be handled), and it switches
-           all fans back to rhw default speed 100% to avoid overheating while `smfc` is not running."""
+        all fans back to rhw default speed 100% to avoid overheating while `smfc` is not running.
+        """
         # Configure fans.
-        if hasattr(self, 'ipmi'):
+        if hasattr(self, "ipmi"):
             self.ipmi.set_fan_mode(Ipmi.FULL_MODE)
-            if hasattr(self, 'log'):
-                self.log.msg(Log.LOG_INFO, 'smfc terminated: all fans are switched back to the 100% speed.')
+            if hasattr(self, "log"):
+                self.log.msg(
+                    Log.LOG_INFO,
+                    "smfc terminated: all fans are switched back to the 100% speed.",
+                )
 
         # Unregister this function.
         atexit.unregister(self.exit_func)
@@ -64,50 +68,46 @@ class Service:
         no_drivetemp: bool = False
 
         # Check if `ipmitool` command is available.
-        path = self.config[Ipmi.CS_IPMI].get(Ipmi.CV_IPMI_COMMAND, '/usr/bin/ipmitool')
+        path = self.config[Ipmi.CS_IPMI].get(Ipmi.CV_IPMI_COMMAND, "/usr/bin/ipmitool")
         if not os.path.exists(path):
-            return f'ERROR: ipmitool command cannot be found {path}!'
+            return f"ERROR: ipmitool command cannot be found {path}!"
 
         # Load the list of kernel modules.
-        with open('/proc/modules', 'rt', encoding='utf-8') as file:
+        with open("/proc/modules", "rt", encoding="utf-8") as file:
             modules = file.read()
 
         # Check the kernel modules for CPU zone.
         if self.cpu_zone_enabled:
-            if 'coretemp' not in modules and 'k10temp' not in modules:
-                return 'ERROR: coretemp or k10temp kernel module must be loaded!'
+            if "coretemp" not in modules and "k10temp" not in modules:
+                return "ERROR: coretemp or k10temp kernel module must be loaded!"
 
         # Check dependencies for HD zone.
         if self.hd_zone_enabled:
 
             # Check if `smartctl` command is available.
-            path = self.config[HdZone.CS_HD_ZONE].get(HdZone.CV_HD_ZONE_SMARTCTL_PATH, '/usr/sbin/smartctl')
+            path = self.config[HdZone.CS_HD_ZONE].get(
+                HdZone.CV_HD_ZONE_SMARTCTL_PATH, "/usr/sbin/smartctl"
+            )
             if not os.path.exists(path):
                 no_smartctl = True
 
             # Check if `drivetemp` modules is loaded.
-            if 'drivetemp' not in modules:
+            if "drivetemp" not in modules:
                 no_drivetemp = True
 
             # If neither `drivetemp` nor `smartctl` is available.
             if no_smartctl and no_drivetemp:
-                return f'ERROR: drivetemp kernel module must be loaded or smartctl command ({path}) must be installed!'
+                return f"ERROR: drivetemp kernel module must be loaded or smartctl command ({path}) must be installed!"
 
             # If Standby Guard feature enabled, `smartctl` command should be available
-            sge = self.config[HdZone.CS_HD_ZONE].getboolean(HdZone.CV_HD_ZONE_STANDBY_GUARD_ENABLED, fallback=False)
+            sge = self.config[HdZone.CS_HD_ZONE].getboolean(
+                HdZone.CV_HD_ZONE_STANDBY_GUARD_ENABLED, fallback=False
+            )
             if sge and no_smartctl:
-                return f'ERROR: smartctl command ({path}) must be installed for Standby Guard feature!'
-
-        # Check dependencies for GPU zone
-        if self.gpu_zone_enabled:
-
-            # Check if `nvidia-smi` command is available.
-            path = self.config[GpuZone.CS_GPU_ZONE].get(GpuZone.CV_GPU_ZONE_NVIDIA_SMI_PATH, '/usr/bin/nvidia-smi')
-            if not os.path.exists(path):
-                return f'ERROR: nvidia-smi command cannot be found {path}!'
+                return f"ERROR: smartctl command ({path}) must be installed for Standby Guard feature!"
 
         # All required run-time dependencies are available.
-        return ''
+        return ""
 
     def run(self) -> None:
         """Run function: main execution function of the systemd service.
@@ -122,26 +122,52 @@ class Service:
         9 - udev initialization error
         10 - none of the fan controllers is enabled
         """
-        app_parser: ArgumentParser     # Instance for an ArgumentParser class
-        parsed_results: Namespace      # Results of parsed command line arguments
-        old_mode: int                  # Old IPMI fan mode
+        app_parser: ArgumentParser  # Instance for an ArgumentParser class
+        parsed_results: Namespace  # Results of parsed command line arguments
+        old_mode: int  # Old IPMI fan mode
 
         # Handling of the command line arguments.
         app_parser = ArgumentParser()
         # Syntax definition of the command-line parameters.
-        app_parser.add_argument('-c', action='store', dest='config_file', default='smfc.conf',
-                                help='configuration file (default is /etc/smfc/smfc.conf)')
-        app_parser.add_argument('-v', '--version', action='version', version='%(prog)s ' + version("smfc"))
-        app_parser.add_argument('-l', type=int, choices=[0, 1, 2, 3, 4], default=1,
-                                help='set log level: 0-NONE, 1-ERROR(default), 2-CONFIG, 3-INFO, 4-DEBUG')
-        app_parser.add_argument('-o', type=int, choices=[0, 1, 2], default=2,
-                                help='set log output: 0-stdout, 1-stderr, 2-syslog(default)')
-        app_parser.add_argument('-nd', action='store_true', default=False,
-                                help='no dependency checking at start')
-        app_parser.add_argument('-s', action='store_true', default=False,
-                                help='use sudo command')
-        app_parser.add_argument('-ne', action='store_true', default=False,
-                                help='no fan speed recovery at exit')
+        app_parser.add_argument(
+            "-c",
+            action="store",
+            dest="config_file",
+            default="smfc.conf",
+            help="configuration file (default is /etc/smfc/smfc.conf)",
+        )
+        app_parser.add_argument(
+            "-v", "--version", action="version", version="%(prog)s " + version("smfc")
+        )
+        app_parser.add_argument(
+            "-l",
+            type=int,
+            choices=[0, 1, 2, 3, 4],
+            default=1,
+            help="set log level: 0-NONE, 1-ERROR(default), 2-CONFIG, 3-INFO, 4-DEBUG",
+        )
+        app_parser.add_argument(
+            "-o",
+            type=int,
+            choices=[0, 1, 2],
+            default=2,
+            help="set log output: 0-stdout, 1-stderr, 2-syslog(default)",
+        )
+        app_parser.add_argument(
+            "-nd",
+            action="store_true",
+            default=False,
+            help="no dependency checking at start",
+        )
+        app_parser.add_argument(
+            "-s", action="store_true", default=False, help="use sudo command"
+        )
+        app_parser.add_argument(
+            "-ne",
+            action="store_true",
+            default=False,
+            help="no fan speed recovery at exit",
+        )
         # Parsing of the current arguments.
         parsed_results = app_parser.parse_args()
 
@@ -156,41 +182,74 @@ class Service:
         try:
             self.log = Log(parsed_results.l, parsed_results.o)
         except ValueError as e:
-            print(f'ERROR: {e}.', flush=True, file=sys.stdout)
+            print(f"ERROR: {e}.", flush=True, file=sys.stdout)
             sys.exit(5)
 
         # Log command line parameters.
         if self.log.log_level >= Log.LOG_CONFIG:
             self.log.msg(Log.LOG_CONFIG, f'Smfc version {version("smfc")} started')
-            self.log.msg(Log.LOG_CONFIG, 'Command line arguments:')
-            self.log.msg(Log.LOG_CONFIG, f'   original arguments: {" ".join(sys.argv[:])}')
-            self.log.msg(Log.LOG_CONFIG, f'   parsed config file = {parsed_results.config_file}')
-            self.log.msg(Log.LOG_CONFIG, 'Logging was initialized with:')
-            self.log.msg(Log.LOG_CONFIG, f'   log_level = {self.log.log_level}')
-            self.log.msg(Log.LOG_CONFIG, f'   log_output = {self.log.log_output}')
+            self.log.msg(Log.LOG_CONFIG, "Command line arguments:")
+            self.log.msg(
+                Log.LOG_CONFIG, f'   original arguments: {" ".join(sys.argv[:])}'
+            )
+            self.log.msg(
+                Log.LOG_CONFIG, f"   parsed config file = {parsed_results.config_file}"
+            )
+            self.log.msg(Log.LOG_CONFIG, "Logging was initialized with:")
+            self.log.msg(Log.LOG_CONFIG, f"   log_level = {self.log.log_level}")
+            self.log.msg(Log.LOG_CONFIG, f"   log_output = {self.log.log_output}")
 
         # Parse and load configuration file.
         self.config = ConfigParser()
         if not self.config or not self.config.read(parsed_results.config_file):
-            self.log.msg(Log.LOG_ERROR, f'Cannot load configuration file ({parsed_results.config_file})')
+            self.log.msg(
+                Log.LOG_ERROR,
+                f"Cannot load configuration file ({parsed_results.config_file})",
+            )
             sys.exit(6)
         # Read [CPU zone] enabled= parameter if the section exists.
-        self.cpu_zone_enabled = (self.config[CpuZone.CS_CPU_ZONE].
-                                 getboolean(CpuZone.CV_CPU_ZONE_ENABLED, fallback=False)) \
-            if self.config.has_section(CpuZone.CS_CPU_ZONE) else False
+        self.cpu_zone_enabled = (
+            (
+                self.config[CpuZone.CS_CPU_ZONE].getboolean(
+                    CpuZone.CV_CPU_ZONE_ENABLED, fallback=False
+                )
+            )
+            if self.config.has_section(CpuZone.CS_CPU_ZONE)
+            else False
+        )
         # Read [HD zone] enabled= parameter if the section exists.
-        self.hd_zone_enabled = (self.config[HdZone.CS_HD_ZONE].
-                                getboolean(HdZone.CV_HD_ZONE_ENABLED, fallback=False)) \
-            if self.config.has_section(HdZone.CS_HD_ZONE) else False
+        self.hd_zone_enabled = (
+            (
+                self.config[HdZone.CS_HD_ZONE].getboolean(
+                    HdZone.CV_HD_ZONE_ENABLED, fallback=False
+                )
+            )
+            if self.config.has_section(HdZone.CS_HD_ZONE)
+            else False
+        )
         # Read [GPU zone] enabled= parameter if the section exists.
-        self.gpu_zone_enabled = (self.config[GpuZone.CS_GPU_ZONE].
-                                 getboolean(GpuZone.CV_GPU_ZONE_ENABLED, fallback=False)) \
-            if self.config.has_section(GpuZone.CS_GPU_ZONE) else False
+        self.gpu_zone_enabled = (
+            (
+                self.config[GpuZone.CS_GPU_ZONE].getboolean(
+                    GpuZone.CV_GPU_ZONE_ENABLED, fallback=False
+                )
+            )
+            if self.config.has_section(GpuZone.CS_GPU_ZONE)
+            else False
+        )
         # Read [CONST zone] enabled= parameter if the section exists.
-        self.const_zone_enabled = (self.config[ConstZone.CS_CONST_ZONE].
-                                   getboolean(ConstZone.CV_CONST_ZONE_ENABLED, fallback=False)) \
-            if self.config.has_section(ConstZone.CS_CONST_ZONE) else False
-        self.log.msg(Log.LOG_DEBUG, f'Configuration file ({parsed_results.config_file}) loaded')
+        self.const_zone_enabled = (
+            (
+                self.config[ConstZone.CS_CONST_ZONE].getboolean(
+                    ConstZone.CV_CONST_ZONE_ENABLED, fallback=False
+                )
+            )
+            if self.config.has_section(ConstZone.CS_CONST_ZONE)
+            else False
+        )
+        self.log.msg(
+            Log.LOG_DEBUG, f"Configuration file ({parsed_results.config_file}) loaded"
+        )
 
         # Check run-time dependencies (commands, kernel modules) if `-nd` command line option is not specified.
         if not parsed_results.nd:
@@ -204,47 +263,62 @@ class Service:
             self.ipmi = Ipmi(self.log, self.config, self.sudo)
             old_mode = self.ipmi.get_fan_mode()
         except (ValueError, FileNotFoundError) as e:
-            self.log.msg(Log.LOG_ERROR, f'{e}.')
+            self.log.msg(Log.LOG_ERROR, f"{e}.")
             sys.exit(8)
         # Log the old fan mode and zone levels in DEBUG log mode.
         if self.log.log_level >= Log.LOG_DEBUG:
-            self.log.msg(Log.LOG_DEBUG, f'Old IPMI fan mode = {self.ipmi.get_fan_mode_name(old_mode)} ({old_mode})')
-            self.log.msg(Log.LOG_DEBUG, f'Old CPU zone (0) level = {self.ipmi.get_fan_level(Ipmi.CPU_ZONE)}%')
-            self.log.msg(Log.LOG_DEBUG, f'Old HD zone (1) level = {self.ipmi.get_fan_level(Ipmi.HD_ZONE)}%')
+            self.log.msg(
+                Log.LOG_DEBUG,
+                f"Old IPMI fan mode = {self.ipmi.get_fan_mode_name(old_mode)} ({old_mode})",
+            )
+            self.log.msg(
+                Log.LOG_DEBUG,
+                f"Old CPU zone (0) level = {self.ipmi.get_fan_level(Ipmi.CPU_ZONE)}%",
+            )
+            self.log.msg(
+                Log.LOG_DEBUG,
+                f"Old HD zone (1) level = {self.ipmi.get_fan_level(Ipmi.HD_ZONE)}%",
+            )
         #  Set the FULL IPMI fan mode if it is not the current fan mode.
         if old_mode != Ipmi.FULL_MODE:
             self.ipmi.set_fan_mode(Ipmi.FULL_MODE)
-            self.log.msg(Log.LOG_DEBUG,
-                         f'New IPMI fan mode = {self.ipmi.get_fan_mode_name(Ipmi.FULL_MODE)}')
+            self.log.msg(
+                Log.LOG_DEBUG,
+                f"New IPMI fan mode = {self.ipmi.get_fan_mode_name(Ipmi.FULL_MODE)}",
+            )
 
         # Initialize connection to udev database
         try:
             self.udevc = Context()
         except ImportError as e:
-            self.log.msg(Log.LOG_ERROR, f'pyudev error: Could not interface with libudev: {e}.')
+            self.log.msg(
+                Log.LOG_ERROR, f"pyudev error: Could not interface with libudev: {e}."
+            )
             sys.exit(9)
 
         # Create an instance for CPU zone fan controller if enabled.
         if self.cpu_zone_enabled:
-            self.log.msg(Log.LOG_DEBUG, 'CPU zone fan controller enabled')
+            self.log.msg(Log.LOG_DEBUG, "CPU zone fan controller enabled")
             self.cpu_zone = CpuZone(self.log, self.udevc, self.ipmi, self.config)
             time.sleep(self.ipmi.fan_level_delay)
 
         # Create an instance for HD zone fan controller if enabled.
         if self.hd_zone_enabled:
-            self.log.msg(Log.LOG_DEBUG, 'HD zone fan controller enabled')
-            self.hd_zone = HdZone(self.log, self.udevc, self.ipmi, self.config, self.sudo)
+            self.log.msg(Log.LOG_DEBUG, "HD zone fan controller enabled")
+            self.hd_zone = HdZone(
+                self.log, self.udevc, self.ipmi, self.config, self.sudo
+            )
             time.sleep(self.ipmi.fan_level_delay)
 
         # Create an instance for GPU zone fan controller if enabled.
         if self.gpu_zone_enabled:
-            self.log.msg(Log.LOG_DEBUG, 'GPU zone fan controller enabled')
+            self.log.msg(Log.LOG_DEBUG, "GPU zone fan controller enabled")
             self.gpu_zone = GpuZone(self.log, self.ipmi, self.config)
             time.sleep(self.ipmi.fan_level_delay)
 
         # Create an instance for Const zone fan controller if enabled.
         if self.const_zone_enabled:
-            self.log.msg(Log.LOG_DEBUG, 'CONST zone fan controller enabled')
+            self.log.msg(Log.LOG_DEBUG, "CONST zone fan controller enabled")
             self.const_zone = ConstZone(self.log, self.ipmi, self.config)
             time.sleep(self.ipmi.fan_level_delay)
 
@@ -261,12 +335,15 @@ class Service:
 
         # If none of the fan controller zones is enabled.
         if len(polling_set) == 0:
-            self.log.msg(Log.LOG_ERROR, 'None of the zones / fan controllers are enabled, service terminated.')
+            self.log.msg(
+                Log.LOG_ERROR,
+                "None of the zones / fan controllers are enabled, service terminated.",
+            )
             sys.exit(10)
 
         # Calculate the wait time in the main loop.
         wait = min(polling_set) / 2
-        self.log.msg(Log.LOG_DEBUG, f'Main loop sleep time = {wait} sec')
+        self.log.msg(Log.LOG_DEBUG, f"Main loop sleep time = {wait} sec")
 
         # Main execution loop.
         while True:

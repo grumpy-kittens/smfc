@@ -4,6 +4,8 @@
 #   This script will build `smfc` docker image.
 #
 
+uv build
+
 # If no version parameter specified.
 if [ -z "$1" ];
 then
@@ -20,8 +22,8 @@ BUILD_IMAGE_NAME="smfc-mi50-custom"
 DOCKER_BUILDKIT=1 docker build -t ${BUILD_IMAGE_NAME}:"$BUILD_IMAGE_VERSION" --build-arg BUILD_IMAGE_VERSION="$BUILD_IMAGE_VERSION" -f ./docker/Dockerfile-alpine .
 #DOCKER_BUILDKIT=1 docker build -t ${BUILD_IMAGE_NAME}:"$BUILD_IMAGE_VERSION-gpu" --build-arg BUILD_IMAGE_VERSION="$BUILD_IMAGE_VERSION-gpu" -f ./docker/Dockerfile-debian .
 
-# Set secondary tag (i.e. latest) if specified.
-if [ -n "$2" ];
+# Set if latest specified.
+if [ -n "$1" ];
 then
     docker image tag ${BUILD_IMAGE_NAME}:"$BUILD_IMAGE_VERSION" ${BUILD_IMAGE_NAME}:$2
     #docker image tag ${BUILD_IMAGE_NAME}:"$BUILD_IMAGE_VERSION-gpu" ${BUILD_IMAGE_NAME}:"$2-gpu"
