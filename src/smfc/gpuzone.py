@@ -19,7 +19,7 @@ class GpuZone(FanController):
     # GpuZone specific parameters.
     gpu_device_ids: List[int]  # GPU device IDs (indexes)
     gpu_temperature: List[float]  # List of GPU temperatures
-    temp_retrieved: float  # Last time temp was retrieved
+    temp_retrieved: list[float]  # Last time temp was retrieved
 
     # Constant values for the configuration parameters.
     CS_GPU_ZONE: str = "GPU zone"
@@ -62,7 +62,7 @@ class GpuZone(FanController):
                     f"invalid value: {self.CV_GPU_ZONE_GPU_IDS}={gpu_id_list}."
                 )
         count = len(self.gpu_device_ids)
-        self.temp_retrieved: list[float] = [0, 0]
+        self.temp_retrieved: list[float] = [0 for _ in range(count)]
         self.gpu_temperature: list[float] = [0 for _ in range(count)]
 
         # Initialize FanController class.
